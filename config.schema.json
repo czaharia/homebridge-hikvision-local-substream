@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "Hikvision-Local",
+  "pluginAlias": "Hikvision-Local-Substream",
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "",
@@ -11,7 +11,7 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Hikvision-Local",
+        "default": "Hikvision-Local-Substream",
         "description": "Plugin name as displayed in the Homebridge log"
       },
       "host": {
@@ -19,6 +19,13 @@
         "type": "string",
         "required": true,
         "description": "This is the name / ip address for your HikVision NVR/DVR."
+      },
+      "useSubStream": {
+        "title": "Use Sub-Stream (low CPU)",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": "Stream from the sub-stream channel (X02) instead of the main stream (X01). Enable this when your main stream is H.265/HEVC — ffmpeg will copy the H.264 sub-stream directly to HomeKit with no transcoding, dramatically reducing CPU usage. Requires the sub-stream to be configured as H.264 on the DVR."
       },
       "port": {
         "title": "HikVision NVR/DVR Host port",
@@ -128,6 +135,7 @@
           }
         },
         "debugFfmpeg",
+        "useSubStream",
         "ignoreInsecureTls",
         "refresh",
         {

@@ -1,13 +1,13 @@
 {
-  "name": "homebridge-hikvision-local",
+  "name": "homebridge-hikvision-local-substream",
   "type": "module",
-  "homepage": "https://github.com/NorthernMan54/homebridge-hikvision-local",
-  "version": "2.2.0",
+  "homepage": "https://github.com/czaharia/homebridge-hikvision-local-substream",
+  "version": "0.1.2",
   "main": "dist/index.js",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NorthernMan54/homebridge-hikvision-local.git"
+    "url": "git+https://github.com/czaharia/homebridge-hikvision-local-substream.git"
   },
   "dependencies": {
     "@homebridge-plugins/homebridge-camera-ffmpeg": "^4.1.0",
