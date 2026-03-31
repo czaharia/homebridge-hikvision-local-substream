@@ -7,10 +7,10 @@ This plugin will automatically discover all cameras connected to your DVR and wi
 ## Hikvsion DVR/NVR Tested with this version of the plugin
 
 * ERI-K104-P4, which is included within the EKI-K41T44C kit
-
-As I only have access to this device, this is the only one I can confirm as working.
+* DS-7604NXI-K1
 
 ## Configuration
+New option: Use Sub-Stream (low CPU) this uses the stream from the sub-stream channel (X02) instead of the main stream (X01). Enable this when your main stream is H.265/HEVC — ffmpeg will copy the H.264 sub-stream directly to HomeKit with no transcoding, dramatically reducing CPU usage. Requires the sub-stream to be configured as H.264 on the DVR.
 
 ### Video / Live view streaming
 
