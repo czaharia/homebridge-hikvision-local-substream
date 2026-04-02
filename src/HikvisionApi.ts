@@ -15,6 +15,7 @@ export interface HikVisionNvrApiConfiguration extends PlatformConfig {
   debugFfmpeg: boolean
   doorbells: string[]
   debug: boolean
+  useSubStream: boolean
 }
 
 export class HikvisionApi {
@@ -44,29 +45,9 @@ export class HikvisionApi {
         timeout: 8000,
         agent: new https.Agent({ rejectUnauthorized: !this.config.ignoreInsecureTls }),
       },
-      (msg: string) => this.log.debug(msg), // or `console.log`
+      (msg: string) => this.log.debug(msg),
     );
   }
-
-  /*
-    "DeviceInfo": {
-    "$": {
-      "version": "2.0",
-      "xmlns": "http://www.isapi.org/ver20/XMLSchema"
-    },
-    "deviceName": "Network Video Recorder",
-    "deviceID": "48443030-3637-3534-3837-f84dfcf8ef1c",
-    "model": "DS-7608NI-I2/8P",
-    "serialNumber": "DS-7608NI-I2/8P0820190316CCRRD00675487WCVU",
-    "macAddress": "f8:4d:fc:f8:ef:1c",
-    "firmwareVersion": "V4.22.005",
-    "firmwareReleasedDate": "build 191208",
-    "encoderVersion": "V5.0",
-    "encoderReleasedDate": "build 191208",
-    "deviceType": "NVR",
-    "telecontrolID": "255"
-  }
-  */
 
   public async getSystemInfo() {
     return this._getResponse('/ISAPI/System/deviceInfo');
@@ -79,7 +60,7 @@ export class HikvisionApi {
       for (let i = 0; i < channels.VideoInputChannelList.VideoInputChannel.length; i++) {
         const channel = channels.VideoInputChannelList.VideoInputChannel[i];
         if (channel.resDesc !== 'NO VIDEO') {
-          channel.capabilities = await this._getResponse(`/ISAPI/ContentMgmt/StreamingProxy/channels/${channel.id}01/capabilities`);
+          channel.capabilities = await this._getCapabilities(channel.id);
         }
         channel.status = { online: channel.resDesc !== 'NO VIDEO' };
       }
@@ -91,13 +72,49 @@ export class HikvisionApi {
       for (let i = 0; i < channels2.InputProxyChannelList.InputProxyChannel.length; i++) {
         const channel = channels2.InputProxyChannelList.InputProxyChannel[i];
         if (channel.resDesc !== 'NO VIDEO') {
-          channel.capabilities = await this._getResponse(`/ISAPI/ContentMgmt/StreamingProxy/channels/${channel.id}01/capabilities`);
+          channel.capabilities = await this._getCapabilities(channel.id);
         }
         channel.status = { online: channel.resDesc !== 'NO VIDEO' };
       }
 
       return channels2.InputProxyChannelList.InputProxyChannel.filter((camera: { status: { online: boolean; }; }) => camera.status.online);
     }
+  }
+
+  // Try StreamingProxy first (NVR), fall back to direct Streaming endpoint (older/hybrid DVR)
+  private async _getCapabilities(channelId: string): Promise<any> {
+    const proxyPath = `/ISAPI/ContentMgmt/StreamingProxy/channels/${channelId}01/capabilities`;
+    const directPath = `/ISAPI/Streaming/channels/${channelId}01/capabilities`;
+
+    const proxyResult = await this._getResponse(proxyPath);
+
+    if (proxyResult?.StreamingChannel) {
+      this.log.debug(`Capabilities for channel ${channelId} via StreamingProxy`);
+      return proxyResult;
+    }
+
+    this.log.debug(`StreamingProxy capabilities not available for channel ${channelId} (403 or missing StreamingChannel), trying direct Streaming endpoint...`);
+    const directResult = await this._getResponse(directPath);
+
+    if (directResult?.StreamingChannel) {
+      this.log.debug(`Capabilities for channel ${channelId} via direct Streaming endpoint`);
+      return directResult;
+    }
+
+    // Last resort: synthesise minimal capabilities from the channel info itself
+    // so the camera still registers even if neither endpoint works.
+    this.log.warn(`Could not retrieve capabilities for channel ${channelId} from any endpoint. Using fallback defaults.`);
+    return {
+      StreamingChannel: {
+        Video: {
+          videoResolutionWidth: { '#text': 1280 },
+          videoResolutionHeight: { '#text': 720 },
+          maxFrameRate: { '#text': 2500 }, // 25fps * 100
+          vbrUpperCap: { '#text': 2048 },
+        },
+        Audio: null,
+      },
+    };
   }
 
   async startMonitoringEvents(callback: (event: any) => void): Promise<void> {
@@ -117,7 +134,7 @@ export class HikvisionApi {
         const res = await this.client.fetch(url, {
           method: 'GET',
           headers: {
-            Accept: 'multipart/mixed', // Adjusted for Hikvision event stream
+            Accept: 'multipart/mixed',
           },
           signal: this.abortController.signal,
         });
@@ -214,10 +231,8 @@ export class HikvisionApi {
           timeout: 8000,
           agent: new https.Agent({ rejectUnauthorized: !this.config.ignoreInsecureTls }),
         },
-        (msg: string) => this.log.debug(msg), // or `console.log`
+        (msg: string) => this.log.debug(msg),
       );
-
-      // this.log.debug(`➡️ Fetching URL: ${url}`);
 
       const res = await client.fetch(url, {
         method: 'GET',
@@ -234,12 +249,6 @@ export class HikvisionApi {
 
       const xml = await res.text();
 
-      // Log raw response
-      // this.log.debug(`⬅️ STATUS: ${res.status} ${res.statusText}`);
-      // this.log.debug(`⬅️ HEADERS: ${JSON.stringify(Object.fromEntries(res.headers.entries()), null, 2)}`);
-      // this.log.debug(`⬅️ BODY: ${xml}`);
-
-      // Always attempt to parse XML (even for 403 or 404)
       let responseJson: any;
       try {
         responseJson = this.xmlParser.parse(xml);

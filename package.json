@@ -2,7 +2,7 @@
   "name": "homebridge-hikvision-local-substream",
   "type": "module",
   "homepage": "https://github.com/czaharia/homebridge-hikvision-local-substream",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "main": "dist/index.js",
   "license": "MIT",
   "repository": {
