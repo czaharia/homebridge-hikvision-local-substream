@@ -41,6 +41,7 @@ export class HikVisionNVR {
       apiCameras.map((channel: {
         id: string;
         name: string;
+        resDesc: string;
         capabilities: any;
         sourceInputPortDescriptor: any
       }) => {
@@ -50,22 +51,43 @@ export class HikVisionNVR {
           return;
         }
 
-        if (this.config.maxWidth || this.config.maxWidth) {
+        if (this.config.maxWidth || this.config.maxHeight) {
           // eslint-disable-next-line max-len
           this.log.debug(`Overriding supplied camera config ${channel.name} - ${channel.capabilities.StreamingChannel.Video?.videoResolutionWidth?.['#text']}x${channel.capabilities.StreamingChannel.Video?.videoResolutionHeight?.['#text']} with ${this.config.maxWidth}x${this.config.maxHeight}`);
         }
+
+        // maxFrameRate is stored as fps*100 on NVRs (e.g. 2500 = 25fps),
+        // but older DVRs may return the plain fps value (e.g. 25) or nothing at all.
+        const rawFPS = channel.capabilities.StreamingChannel.Video?.maxFrameRate?.['#text'];
+        const maxFPS = rawFPS
+          ? (rawFPS > 100 ? Math.round(rawFPS / 100) : rawFPS)
+          : 25;
+
+        const rawBitrate = channel.capabilities.StreamingChannel.Video?.vbrUpperCap?.['#text'];
+        const maxBitrate = rawBitrate || 2048;
+
+        const rawWidth = channel.capabilities.StreamingChannel.Video?.videoResolutionWidth?.['#text'];
+        const rawHeight = channel.capabilities.StreamingChannel.Video?.videoResolutionHeight?.['#text'];
+
+        // model: prefer sourceInputPortDescriptor, fall back to resDesc, then a generic string
+        const model: string =
+          channel.sourceInputPortDescriptor?.model ||
+          channel.resDesc ||
+          'Hikvision Camera';
 
         const cameraConfig = {
           accessory: 'camera',
           name: (this.config.test ? 'Test ' : '') + channel.name,
           channelId: channel.id,
-          hasAudio: channel.capabilities.StreamingChannel.Audio ? String(channel.capabilities.StreamingChannel.Audio.enabled['#text']) === 'true' : false,
+          hasAudio: channel.capabilities.StreamingChannel.Audio
+            ? String(channel.capabilities.StreamingChannel.Audio.enabled?.['#text']) === 'true'
+            : false,
           doorbell: (this.config?.doorbells ? this.config?.doorbells.includes(channel.name) : false),
-          model: channel.sourceInputPortDescriptor?.model,
-          maxFPS: channel.capabilities.StreamingChannel.Video?.maxFrameRate?.['#text'] / 100,
-          maxBitrate: channel.capabilities.StreamingChannel.Video?.vbrUpperCap?.['#text'],
-          maxWidth: (this.config.maxWidth ? this.config.maxWidth : channel.capabilities.StreamingChannel.Video?.videoResolutionWidth?.['#text']),
-          maxHeight: (this.config.maxHeight ? this.config.maxHeight : channel.capabilities.StreamingChannel.Video?.videoResolutionHeight?.['#text']),
+          model,
+          maxFPS,
+          maxBitrate,
+          maxWidth: (this.config.maxWidth ? this.config.maxWidth : (rawWidth || 1280)),
+          maxHeight: (this.config.maxHeight ? this.config.maxHeight : (rawHeight || 720)),
         };
 
         const cameraUUID = this.homebridgeApi.hap.uuid.generate((this.config.test ? 'Test ' : '') + HIKVISION_PLUGIN_NAME + systemInformation.DeviceInfo.deviceID + cameraConfig.channelId,
@@ -99,17 +121,6 @@ export class HikVisionNVR {
     } else {
       this.log.error(`Failed to connect to NVR system @ ${this.hikVisionApi._baseURL}`);
     }
-
-    // var camerasToRemove: any[] = [];
-    // // Remove cameras that were not in previous call
-    // this.cameras.forEach((camera: any) => {
-    //   if (!newAccessories.find((x: PlatformAccessory) => x.UUID === camera.UUID)) {
-    //     this.log(`Unregistering missing camera: ${camera.UUID}`)
-    //     camerasToRemove.push(camera.accessory);
-    //   }
-    // });
-
-    // this.homebridgeApi.unregisterPlatformAccessories(HIKVISION_PLUGIN_NAME, HIKVISION_PLATFORM_NAME, camerasToRemove);
   }
 
   async configureAccessory(accessory: PlatformAccessory) {
@@ -121,9 +132,7 @@ export class HikVisionNVR {
       this.homebridgeApi.hap.Service.AccessoryInformation,
     );
     cameraAccessoryInfo!.setCharacteristic(this.homebridgeApi.hap.Characteristic.Manufacturer, 'HikVision');
-    cameraAccessoryInfo!.setCharacteristic(this.homebridgeApi.hap.Characteristic.Model, accessory.context.model);
-    // cameraAccessoryInfo!.setCharacteristic(this.homebridgeApi.hap.Characteristic.SerialNumber, systemInformation.DeviceInfo.serialNumber);
-    // cameraAccessoryInfo!.setCharacteristic(this.homebridgeApi.hap.Characteristic.FirmwareRevision, systemInformation.DeviceInfo.firmwareVersion);
+    cameraAccessoryInfo!.setCharacteristic(this.homebridgeApi.hap.Characteristic.Model, accessory.context.model ?? 'Hikvision Camera');
 
     this.cameras.push(camera);
   }
